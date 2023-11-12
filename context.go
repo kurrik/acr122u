@@ -77,6 +77,11 @@ func (ctx *Context) Readers() []string {
 	return ctx.readers
 }
 
+// SetReaders updates the list of readers, e.g. to filter to a specific reader
+func (ctx *Context) SetReaders(r []string) {
+	ctx.readers = r
+}
+
 // ServeFunc uses the provided HandlerFunc as a Handler
 func (ctx *Context) ServeFunc(hf HandlerFunc) error {
 	return ctx.Serve(hf)
