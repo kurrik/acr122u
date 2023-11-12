@@ -1,8 +1,8 @@
 package main
 
 import (
+	acr122u "github.com/kurrik/acr122u"
 	nats "github.com/nats-io/go-nats"
-	acr122u "github.com/peterhellberg/acr122u"
 )
 
 func main() {

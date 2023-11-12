@@ -5,7 +5,7 @@ import (
 	"log"
 	"testing"
 
-	"github.com/peterhellberg/acr122u"
+	"github.com/kurrik/acr122u"
 )
 
 func TestHandlerServeCard(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/peterhellberg/acr122u"
+	"github.com/kurrik/acr122u"
 )
 
 func main() {

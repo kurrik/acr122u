@@ -1,46 +1,44 @@
 /*
-
 Package acr122u is a library for the ACR122U USB NFC Reader
 
-Requirements
+# Requirements
 
 ACR122U USB NFC Reader https://www.acs.com.hk/en/products/3/acr122u-usb-nfc-reader
 
 Middleware to access a smart card using SCard API (PC/SC)  https://pcsclite.apdu.fr
 
-    Under macOS pcsc-lite can be installed using homebrew: brew install pcsc-lite
+	Under macOS pcsc-lite can be installed using homebrew: brew install pcsc-lite
 
 The Go bindings to the PC/SC API https://github.com/ebfe/scard
 
-Installation
+# Installation
 
 You can install the acr122u package using go get
 
-    go get -u github.com/peterhellberg/acr122u
+	go get -u github.com/kurrik/acr122u
 
-Usage
+# Usage
 
 A minimal usage example
 
-    package main
+	package main
 
-    import (
-    	"fmt"
+	import (
+		"fmt"
 
-    	"github.com/peterhellberg/acr122u"
-    )
+		"github.com/kurrik/acr122u"
+	)
 
-    func main() {
-    	ctx, err := acr122u.EstablishContext()
-    	if err != nil {
-    		panic(err)
-    	}
+	func main() {
+		ctx, err := acr122u.EstablishContext()
+		if err != nil {
+			panic(err)
+		}
 
-    	ctx.ServeFunc(func(c acr122u.Card) {
-    		fmt.Printf("%x\n", c.UID())
-    	})
-    }
-
+		ctx.ServeFunc(func(c acr122u.Card) {
+			fmt.Printf("%x\n", c.UID())
+		})
+	}
 */
 package acr122u
 

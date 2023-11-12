@@ -2,12 +2,12 @@
 
 <img src="http://downloads.acs.com.hk/product-website-image/acr38-image.jpg" align="right" width="230" height="230">
 
-[![Build status](https://github.com/peterhellberg/acr122u/actions/workflows/test.yml/badge.svg?branch=master)](httpsgithub.com/peterhellberg/acr122u/actions/workflows/test.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/peterhellberg/acr122u)](https://goreportcard.com/report/github.com/peterhellberg/acr122u)
-[![GoDoc](https://img.shields.io/badge/godoc-reference-blue.svg?style=flat)](https://godoc.org/github.com/peterhellberg/acr122u)
-[![License MIT](https://img.shields.io/badge/license-MIT-lightgrey.svg?style=flat)](https://github.com/peterhellberg/acr122u#license-mit)
+[![Build status](https://github.com/kurrik/acr122u/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/kurrik/acr122u/actions/workflows/test.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/kurrik/acr122u)](https://goreportcard.com/report/github.com/kurrik/acr122u)
+[![GoDoc](https://img.shields.io/badge/godoc-reference-blue.svg?style=flat)](https://godoc.org/github.com/kurrik/acr122u)
+[![License MIT](https://img.shields.io/badge/license-MIT-lightgrey.svg?style=flat)](https://github.com/kurrik/acr122u#license-mit)
 
-This is a Go package for the ACR122U USB NFC Reader
+This is a Go package for the ACR122U USB NFC Reader.  It is a fork of http://github.com/peterhellberg/acr122u.
 
 ## Requirements
 
@@ -19,7 +19,7 @@ This is a Go package for the ACR122U USB NFC Reader
 
 ## Installation
 
-    go get -u github.com/peterhellberg/acr122u
+    go get -u github.com/kurrik/acr122u
 
 ## Usage
 
@@ -31,7 +31,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/peterhellberg/acr122u"
+	"github.com/kurrik/acr122u"
 )
 
 func main() {
@@ -55,7 +55,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/peterhellberg/acr122u"
+	"github.com/kurrik/acr122u"
 )
 
 func main() {
@@ -90,7 +90,7 @@ package main
 
 import (
 	nats "github.com/nats-io/go-nats"
-	acr122u "github.com/peterhellberg/acr122u"
+	acr122u "github.com/kurrik/acr122u"
 )
 
 func main() {
