@@ -94,6 +94,10 @@ func (c *mockCard) Status() (*scard.CardStatus, error) {
 	return c.status()
 }
 
+func (c *mockCard) Disconnect(d scard.Disposition) error {
+	return nil
+}
+
 func transmitCard(t func(cmd []byte) ([]byte, error)) *card {
 	return newCard("", &mockCard{transmit: t})
 }

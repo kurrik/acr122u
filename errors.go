@@ -1,16 +1,25 @@
 package acr122u
 
-// Error is tye error type returned by the acr122u package
-type Error struct {
-	Message string
-}
+import (
+	"errors"
+	"fmt"
 
-// Error returns the error message
-func (e Error) Error() string {
-	return e.Message
-}
+	"github.com/ebfe/scard"
+)
 
 var (
 	// ErrOperationFailed is returned when the response code is 0x63 0x00
-	ErrOperationFailed = Error{Message: "operation failed"}
+	ErrOperationFailed = errors.New("operation failed")
+
+	// ErrShutdown is returned when the library detects an interrupt signal
+	ErrShutdown = errors.New("shutting down")
 )
+
+func wrapError(message string, err error) error {
+	switch v := err.(type) {
+	case scard.Error:
+		return fmt.Errorf("%v [%w (%X)]", message, err, uint32(v))
+	default:
+		return fmt.Errorf("%v [%w]", message, err)
+	}
+}

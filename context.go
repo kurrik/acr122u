@@ -1,6 +1,16 @@
 package acr122u
 
-import "github.com/ebfe/scard"
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"time"
+
+	"github.com/ebfe/scard"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+)
 
 var scardEstablishContext = scard.EstablishContext
 
@@ -10,6 +20,8 @@ type Context struct {
 	readers   []string
 	shareMode ShareMode
 	protocol  Protocol
+	logLevel  LogLevel
+	logWriter io.Writer
 }
 
 // EstablishContext creates a ACR122U context
@@ -27,143 +39,239 @@ type Option func(*Context)
 
 // WithShareMode accepts Exclusive (0x1) or Shared mode (0x2)
 func WithShareMode(sm ShareMode) Option {
-	return func(ctx *Context) {
-		ctx.shareMode = sm
+	return func(actx *Context) {
+		actx.shareMode = sm
 	}
 }
 
 // WithProtocol accepts Undefined (0x0), T0 (0x1), T1 (0x2) or Any (T0|T1)
 func WithProtocol(p Protocol) Option {
-	return func(ctx *Context) {
-		ctx.protocol = p
+	return func(actx *Context) {
+		actx.protocol = p
 	}
 }
 
+// Sets the logging level
+func WithLogLevel(l LogLevel) Option {
+	return func(actx *Context) {
+		actx.logLevel = l
+	}
+}
+
+// Sets the log writer
+func WithLogWriter(w io.Writer) Option {
+	return func(actx *Context) {
+		actx.logWriter = w
+	}
+}
+
+// Creates a context with the supplied options.  Processes options for logging.
 func newContext(sctx scardContext, options ...Option) (*Context, error) {
 	if _, err := sctx.IsValid(); err != nil {
 		return nil, err
 	}
-
 	readers, err := sctx.ListReaders()
 	if err != nil {
 		return nil, err
 	}
-
 	if len(readers) == 0 {
 		return nil, scard.ErrNoReadersAvailable
 	}
-
-	ctx := &Context{
+	actx := &Context{
 		context:   sctx,
 		readers:   readers,
 		shareMode: ShareShared,
 		protocol:  ProtocolAny,
+		logLevel:  LogDebug,
+		logWriter: ConsoleLogger,
 	}
-
 	for _, option := range options {
-		option(ctx)
+		option(actx)
 	}
+	zerolog.SetGlobalLevel(zerolog.Level(actx.logLevel))
+	log.Logger = log.Output(actx.logWriter)
 
-	return ctx, nil
+	return actx, nil
 }
 
 // Release should be called when the context is not needed anymore
-func (ctx *Context) Release() error {
-	return ctx.context.Release()
+func (actx *Context) Release() error {
+	return actx.context.Release()
 }
 
 // Readers returns a list of readers
-func (ctx *Context) Readers() []string {
-	return ctx.readers
+func (actx *Context) Readers() []string {
+	return actx.readers
 }
 
 // SetReaders updates the list of readers, e.g. to filter to a specific reader
-func (ctx *Context) SetReaders(r []string) {
-	ctx.readers = r
+func (actx *Context) SetReaders(r []string) {
+	actx.readers = r
 }
 
 // ServeFunc uses the provided HandlerFunc as a Handler
-func (ctx *Context) ServeFunc(hf HandlerFunc) error {
-	return ctx.Serve(hf)
+func (actx *Context) ServeFunc(ctx context.Context, hf HandlerFunc) error {
+	return actx.Serve(ctx, hf)
 }
 
 // Serve cards being swiped using the provided Handler
-func (ctx *Context) Serve(h Handler) error {
-	for {
-		ctx.serve(h)
+func (actx *Context) Serve(ctx context.Context, h Handler) (err error) {
+	// Channel for state reads
+	stateChan := make(chan scard.ReaderState, 1)
+	go actx.read(ctx, stateChan)
+
+	for stateReceived := range stateChan {
+		var userData string
+		if stateReceived.UserData != nil {
+			switch v := stateReceived.UserData.(type) {
+			case []byte:
+				userData = fmt.Sprintf("%X", v)
+			default:
+				userData = fmt.Sprintf("%v", v)
+			}
+		}
+		log.Info().
+			Str("Cur state", formatStateFlag(stateReceived.CurrentState)).
+			Str("Evt state", formatStateFlag(stateReceived.EventState)).
+			Str("User data", userData).
+			Msg("Signal received")
+
+		if stateReceived.EventState&scard.StatePresent != 0 {
+			log.Info().Str("Reader", stateReceived.Reader).Str("UserData", userData).Msg("Would have served")
+			//h.ServeCard(c)
+		}
 	}
+	return nil
 }
 
-func (ctx *Context) serve(h Handler) error {
-	reader, err := ctx.waitUntilCardPresent()
-	if err != nil {
-		return err
-	}
-
-	c, err := ctx.connect(reader)
-	if err != nil {
-		return err
-	}
-
-	if c.uid, err = c.getUID(); err == nil {
-		h.ServeCard(c)
-	} else {
-		return err
-	}
-
-	return ctx.waitUntilCardRelease(reader)
-}
-
-func (ctx *Context) connect(reader string) (*card, error) {
-	sc, err := ctx.context.Connect(reader,
-		scard.ShareMode(ctx.shareMode),
-		scard.Protocol(ctx.protocol),
+// Connects to the reader.  Needs to be called before waiting for state change.
+func (actx *Context) connect(reader string) (*card, error) {
+	sc, err := actx.context.Connect(reader,
+		scard.ShareMode(actx.shareMode),
+		scard.Protocol(actx.protocol),
 	)
 	if err != nil {
 		return nil, err
 	}
-
 	return newCard(reader, sc), nil
 }
 
-func (ctx *Context) waitUntilCardPresent() (string, error) {
-	rs := make([]scard.ReaderState, len(ctx.readers))
+// Disconnects from the reader.  Needs to be called when exiting.
+func (actx *Context) disconnect(c *card) error {
+	err := c.scard.Disconnect(scard.ResetCard)
+	return err
+}
 
+// Initializes a reader structure which will be populated by waitForStatusChange.
+func (actx *Context) initializeReaderState() []scard.ReaderState {
+	rs := make([]scard.ReaderState, len(actx.readers))
 	for i := range rs {
-		rs[i].Reader = ctx.readers[i]
+		rs[i].Reader = actx.readers[i]
 		rs[i].CurrentState = scard.StateUnaware
 	}
+	return rs
+}
 
+// Blocks until the card state changes.  Meant to be called in a goroutine.
+// - Will exit when `ctx“ is closed.
+// - `rs` is an initialized reader state array.
+// - `interruptDuration` configures how frequently the read will timeout and check for the channel close.
+func (actx *Context) waitForStatusChange(ctx context.Context, rs []scard.ReaderState, interruptDuration time.Duration) error {
+	var (
+		logger = log.With().Str("Caller", "waitForStatusChange").Logger()
+	)
+	logger.Debug().Msg("Waiting for status to change")
 	for {
-		for i := range rs {
-			if rs[i].EventState&scard.StatePresent != 0 {
-				return ctx.readers[i], nil
-			}
-
-			rs[i].CurrentState = rs[i].EventState
+		err := actx.context.GetStatusChange(rs, interruptDuration)
+		select {
+		case <-ctx.Done():
+			return ErrShutdown
+		default:
 		}
-
-		if err := ctx.context.GetStatusChange(rs, -1); err != nil {
-			return "", err
+		if err == nil {
+			// Status has changed, signal by returning.
+			logger.Debug().Msg("Got signal")
+			return nil
+		} else {
+			err = wrapError("error waiting for status change", err)
+			switch {
+			case errors.Is(err, scard.ErrTimeout):
+				logger.Trace().Msg("Handled read timeout")
+			default:
+				return err
+			}
 		}
 	}
 }
 
-func (ctx *Context) waitUntilCardRelease(reader string) error {
-	rs := []scard.ReaderState{{
-		Reader:       reader,
-		CurrentState: scard.StatePresent,
-	}}
-
-	for {
-		if rs[0].EventState&scard.StateEmpty != 0 {
-			return nil
+// Reads the data payload from the reader.  Meant to be called when the state changes to StatePresent.
+func (actx *Context) readCardData(state scard.ReaderState) (interface{}, error) {
+	var (
+		logger   = log.With().Str("Caller", "readCardData").Logger()
+		userData interface{}
+	)
+	// Step 1: Connect
+	logger.Debug().Msg("Connecting to reader")
+	c, err := actx.connect(state.Reader)
+	if err != nil {
+		err2 := wrapError("readCardData connect error", err)
+		switch {
+		case errors.Is(err2, scard.ErrNoSmartcard):
+			logger.Debug().Msg("Handled ErrNoSmartcard")
+			return nil, nil
+		default:
+			return nil, err2
 		}
+	}
+	// Step 3 (defer): Disconnect when exiting
+	defer func() {
+		logger.Debug().Msg("Disconnecting")
+		if err := actx.disconnect(c); err != nil {
+			logger.Error().Err(err).Msg("Problem disconnecting")
+		}
+	}()
+	// Step 2: Read payload
+	logger.Debug().Msg("Reading payload")
+	if c.uid, err = c.getUID(); err == nil {
+		userData = c.uid
+	} else {
+		fmt.Printf("Error: %v\n", err)
+		return nil, err
+	}
+	return userData, err
+}
 
-		rs[0].CurrentState = rs[0].EventState
-
-		if err := ctx.context.GetStatusChange(rs, -1); err != nil {
-			return err
+func (actx *Context) read(ctx context.Context, results chan<- scard.ReaderState) {
+	var (
+		logger = log.With().Str("Caller", "read").Logger()
+		rs     = actx.initializeReaderState()
+		err    error
+	)
+	defer close(results)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		err = actx.waitForStatusChange(ctx, rs, time.Second)
+		if err != nil {
+			return
+		}
+		for i := range rs {
+			if rs[i].EventState != rs[i].CurrentState {
+				if rs[i].EventState&scard.StatePresent != 0 {
+					logger.Debug().Msg("Card present")
+					rs[i].UserData, err = actx.readCardData(rs[i])
+					if err != nil {
+						logger.Error().Err(err).Msg("Problem reading card data")
+						return
+					}
+				}
+				results <- rs[i]
+				rs[i].CurrentState = rs[i].EventState
+				rs[i].UserData = nil
+			}
 		}
 	}
 }

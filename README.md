@@ -78,64 +78,6 @@ func (h *handler) ServeCard(c acr122u.Card) {
 }
 ```
 
-### NATS
-
-[NATS](https://nats.io/) is my favorite messaging system,
-so let’s see how we can use it with this package:
-
-#### Publish each UID to a NATS subject
-
-```go
-package main
-
-import (
-	nats "github.com/nats-io/go-nats"
-	acr122u "github.com/kurrik/acr122u"
-)
-
-func main() {
-	nc, err := nats.Connect(nats.DefaultURL)
-	if err != nil {
-		panic(err)
-	}
-
-	ctx, err := acr122u.EstablishContext()
-	if err != nil {
-		panic(err)
-	}
-
-	ctx.ServeFunc(func(c acr122u.Card) {
-		nc.Publish("acr122u", c.UID())
-	})
-}
-```
-
-#### Subscribe to the NATS subject
-
-```go
-package main
-
-import (
-	"fmt"
-	"runtime"
-
-	nats "github.com/nats-io/go-nats"
-)
-
-func main() {
-	nc, err := nats.Connect(nats.DefaultURL)
-	if err != nil {
-		panic(err)
-	}
-
-	nc.Subscribe("acr122u", func(m *nats.Msg) {
-		fmt.Printf("Received UID: %x\n", m.Data)
-	})
-
-	runtime.Goexit()
-}
-```
-
 ## License (MIT)
 
 Copyright (c) 2018-2023 [Peter Hellberg](https://c7.se)

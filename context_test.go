@@ -1,6 +1,8 @@
 package acr122u
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -67,7 +69,7 @@ func TestNewContext(t *testing.T) {
 	})
 
 	t.Run("OK", func(t *testing.T) {
-		ctx, err := newContext(&mockContext{},
+		actx, err := newContext(&mockContext{},
 			WithShareMode(ShareExclusive),
 			WithProtocol(ProtocolT1),
 		)
@@ -75,7 +77,7 @@ func TestNewContext(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if got, want := ctx.readers[0], "Test"; got != want {
+		if got, want := actx.readers[0], "Test"; got != want {
 			t.Fatalf("ctx.readers[0] = %q, want %q", got, want)
 		}
 	})
@@ -83,7 +85,7 @@ func TestNewContext(t *testing.T) {
 
 func TestContextRelease(t *testing.T) {
 	t.Run("Error from Release", func(t *testing.T) {
-		ctx, err := newContext(&mockContext{
+		actx, err := newContext(&mockContext{
 			release: func() error {
 				return scard.ErrUnknownError
 			},
@@ -93,18 +95,18 @@ func TestContextRelease(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if err := ctx.Release(); err != scard.ErrUnknownError {
+		if err := actx.Release(); err != scard.ErrUnknownError {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("OK", func(t *testing.T) {
-		ctx, err := newContext(&mockContext{})
+		actx, err := newContext(&mockContext{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if err := ctx.Release(); err != nil {
+		if err := actx.Release(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -113,30 +115,30 @@ func TestContextRelease(t *testing.T) {
 func TestContextReaders(t *testing.T) {
 	readers := []string{"r1", "r2"}
 
-	ctx := &Context{readers: readers}
+	actx := &Context{readers: readers}
 
-	if got, want := ctx.Readers(), readers; !stringsEqual(got, want) {
+	if got, want := actx.Readers(), readers; !stringsEqual(got, want) {
 		t.Fatalf("ctx.Readers() = %v, want %v", got, want)
 	}
 }
 
 func TestContextConnect(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
-		ctx, err := newContext(&mockContext{})
+		actx, err := newContext(&mockContext{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		_, err = ctx.connect("Test")
+		_, err = actx.connect("Test")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 }
 
-func TestContextWaitUntilCardPresent(t *testing.T) {
+func TestContextWaitForStatusChange(t *testing.T) {
 	t.Run("Error from GetStatusChange", func(t *testing.T) {
-		ctx, err := newContext(&mockContext{
+		actx, err := newContext(&mockContext{
 			getStatusChange: func(rs []scard.ReaderState, timeout time.Duration) error {
 				return scard.ErrUnknownError
 			},
@@ -144,57 +146,30 @@ func TestContextWaitUntilCardPresent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-
-		if _, err := ctx.waitUntilCardPresent(); err != scard.ErrUnknownError {
+		ctx := context.Background()
+		rs := actx.initializeReaderState()
+		duration := time.Duration(-1)
+		if err := actx.waitForStatusChange(ctx, rs, duration); !errors.Is(err, scard.ErrUnknownError) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("OK", func(t *testing.T) {
-		ctx, err := newContext(&mockContext{
+		actx, err := newContext(&mockContext{
 			getStatusChange: getStatusChangeFunc(scard.StatePresent),
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-
-		reader, err := ctx.waitUntilCardPresent()
+		ctx := context.Background()
+		rs := actx.initializeReaderState()
+		duration := time.Duration(-1)
+		err = actx.waitForStatusChange(ctx, rs, duration)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-
-		if got, want := reader, "Test"; got != want {
+		if got, want := rs[0].Reader, "Test"; got != want {
 			t.Fatalf("reader = %q, want %q", got, want)
-		}
-	})
-}
-
-func TestContextWaitUntilCardRelease(t *testing.T) {
-	t.Run("Error from GetStatusChange", func(t *testing.T) {
-		ctx, err := newContext(&mockContext{
-			getStatusChange: func(rs []scard.ReaderState, timeout time.Duration) error {
-				return scard.ErrUnknownError
-			},
-		})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if err := ctx.waitUntilCardRelease("Test"); err != scard.ErrUnknownError {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("OK", func(t *testing.T) {
-		ctx, err := newContext(&mockContext{
-			getStatusChange: getStatusChangeFunc(scard.StateEmpty),
-		})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if err := ctx.waitUntilCardRelease("Test"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 }
