@@ -115,30 +115,31 @@ func (actx *Context) ServeFunc(ctx context.Context, hf HandlerFunc) error {
 }
 
 // Serve cards being swiped using the provided Handler
-func (actx *Context) Serve(ctx context.Context, h Handler) (err error) {
+func (actx *Context) Serve(ctx context.Context, h Handler) error {
+	var (
+		logger = log.With().Str("Caller", "Serve").Logger()
+	)
 	// Channel for state reads
 	stateChan := make(chan scard.ReaderState, 1)
 	go actx.read(ctx, stateChan)
 
 	for stateReceived := range stateChan {
-		var userData string
-		if stateReceived.UserData != nil {
-			switch v := stateReceived.UserData.(type) {
-			case []byte:
-				userData = fmt.Sprintf("%X", v)
-			default:
-				userData = fmt.Sprintf("%v", v)
-			}
-		}
-		log.Info().
+		logger.Info().
 			Str("Cur state", formatStateFlag(stateReceived.CurrentState)).
 			Str("Evt state", formatStateFlag(stateReceived.EventState)).
-			Str("User data", userData).
+			Str("User data", fmt.Sprintf("%v", stateReceived.UserData)).
 			Msg("Signal received")
 
 		if stateReceived.EventState&scard.StatePresent != 0 {
-			log.Info().Str("Reader", stateReceived.Reader).Str("UserData", userData).Msg("Would have served")
-			//h.ServeCard(c)
+			if stateReceived.UserData != nil {
+				switch v := stateReceived.UserData.(type) {
+				case *card:
+					h.ServeCard(v)
+				default:
+					logger.Error().Str("UserData", fmt.Sprintf("%v", v)).Msg("Unahandled card data type")
+					return ErrUnhandledCardData
+				}
+			}
 		}
 	}
 	return nil
@@ -205,10 +206,9 @@ func (actx *Context) waitForStatusChange(ctx context.Context, rs []scard.ReaderS
 }
 
 // Reads the data payload from the reader.  Meant to be called when the state changes to StatePresent.
-func (actx *Context) readCardData(state scard.ReaderState) (interface{}, error) {
+func (actx *Context) readCardData(state scard.ReaderState) (*card, error) {
 	var (
-		logger   = log.With().Str("Caller", "readCardData").Logger()
-		userData interface{}
+		logger = log.With().Str("Caller", "readCardData").Logger()
 	)
 	// Step 1: Connect
 	logger.Debug().Msg("Connecting to reader")
@@ -232,13 +232,11 @@ func (actx *Context) readCardData(state scard.ReaderState) (interface{}, error) 
 	}()
 	// Step 2: Read payload
 	logger.Debug().Msg("Reading payload")
-	if c.uid, err = c.getUID(); err == nil {
-		userData = c.uid
-	} else {
+	if c.uid, err = c.getUID(); err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return nil, err
 	}
-	return userData, err
+	return c, err
 }
 
 func (actx *Context) read(ctx context.Context, results chan<- scard.ReaderState) {

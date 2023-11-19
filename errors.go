@@ -13,6 +13,9 @@ var (
 
 	// ErrShutdown is returned when the library detects an interrupt signal
 	ErrShutdown = errors.New("shutting down")
+
+	// Called if the card payload wasn't deserializable to a card struct.
+	ErrUnhandledCardData = errors.New("unknown card data")
 )
 
 func wrapError(message string, err error) error {
