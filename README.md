@@ -80,7 +80,7 @@ func (h *handler) ServeCard(c acr122u.Card) {
 
 ## License (MIT)
 
-Copyright (c) 2018-2023 [Peter Hellberg](https://c7.se)
+Copyright (c) 2018-2023 [Peter Hellberg](https://c7.se) <br>
 Copyright (c) 2023 Arne Roomann-Kurrik
 
 > Permission is hereby granted, free of charge, to any person obtaining
