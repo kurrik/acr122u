@@ -131,14 +131,15 @@ func (actx *Context) Serve(ctx context.Context, h Handler) error {
 			Msg("Signal received")
 
 		if stateReceived.EventState&scard.StatePresent != 0 {
-			if stateReceived.UserData != nil {
-				switch v := stateReceived.UserData.(type) {
-				case *card:
+			switch v := stateReceived.UserData.(type) {
+			case *card:
+				logger.Debug().Str("UserData", fmt.Sprintf("%v", v)).Msg("Handling card")
+				if v != nil {
 					h.ServeCard(v)
-				default:
-					logger.Error().Str("UserData", fmt.Sprintf("%v", v)).Msg("Unahandled card data type")
-					return ErrUnhandledCardData
 				}
+			default:
+				logger.Error().Str("UserData", fmt.Sprintf("%v", v)).Msg("Unahandled card data type")
+				return ErrUnhandledCardData
 			}
 		}
 	}
