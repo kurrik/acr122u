@@ -198,7 +198,9 @@ func (actx *Context) waitForStatusChange(ctx context.Context, rs []scard.ReaderS
 			err = wrapError("error waiting for status change", err)
 			switch {
 			case errors.Is(err, scard.ErrTimeout):
-				logger.Trace().Msg("Handled read timeout")
+				logger.Trace().Err(err).Msg("Handled timeout error")
+			case errors.Is(err, scard.ErrUnpoweredCard):
+				logger.Trace().Err(err).Msg("Handled unpowered card error")
 			default:
 				return err
 			}
