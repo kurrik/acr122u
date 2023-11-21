@@ -198,9 +198,7 @@ func (actx *Context) waitForStatusChange(ctx context.Context, rs []scard.ReaderS
 			err = wrapError("error waiting for status change", err)
 			switch {
 			case errors.Is(err, scard.ErrTimeout):
-				logger.Trace().Err(err).Msg("Handled timeout error")
-			case errors.Is(err, scard.ErrUnpoweredCard):
-				logger.Trace().Err(err).Msg("Handled unpowered card error")
+				logger.Trace().Err(err).Msg("Handled ErrTimeout")
 			default:
 				return err
 			}
@@ -220,7 +218,10 @@ func (actx *Context) readCardData(state scard.ReaderState) (*card, error) {
 		err2 := wrapError("readCardData connect error", err)
 		switch {
 		case errors.Is(err2, scard.ErrNoSmartcard):
-			logger.Debug().Msg("Handled ErrNoSmartcard")
+			logger.Trace().Err(err2).Msg("Handled ErrNoSmartcard")
+			return nil, nil
+		case errors.Is(err2, scard.ErrUnpoweredCard):
+			logger.Trace().Err(err2).Msg("Handled ErrUnpoweredCard")
 			return nil, nil
 		default:
 			return nil, err2
